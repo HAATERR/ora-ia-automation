@@ -94,11 +94,11 @@ export function analisisProblems(graph) {
     const labels = nodeById[gid]?.data?.labels || [];
     const names = labels.map((l) => (l.name || "").trim()).filter(Boolean);
     const dups = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))];
-    if (dups.length) p.push(`El nodo GPT tiene etiquetas con nombre repetido (${dups.join(", ")}); una se perdería.`);
+    if (dups.length) p.push(`El nodo de IA tiene etiquetas con nombre repetido (${dups.join(", ")}); una se perdería.`);
     const valid = labels.filter(
       (l) => (l.name || "").trim() && edges.some((e) => e.source === gid && e.sourceHandle === l.id && (nodeById[e.target]?.data?.role || "").trim()),
     );
-    if (valid.length === 0) p.push("Un nodo GPT conectado no tiene etiquetas válidas (cada etiqueta necesita nombre y un stage con rol).");
+    if (valid.length === 0) p.push("Un nodo de IA conectado no tiene etiquetas válidas (cada etiqueta necesita nombre y un stage con rol).");
   }
 
   return [...new Set(p)];

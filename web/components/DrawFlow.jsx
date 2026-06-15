@@ -33,7 +33,7 @@ const useEditor = () => useContext(EditorCtx);
 function TriggerNode() {
   return (
     <div className="w-[200px] rounded-lg border border-indigo-500 bg-slate-900 text-xs">
-      <div className="border-b border-slate-700 px-3 py-2 font-semibold text-indigo-300">Simpletalk · post-llamada</div>
+      <div className="border-b border-slate-700 px-3 py-2 font-semibold text-indigo-300">Oraia · post-llamada</div>
       <div className="py-1">
         {["dnc", "dna", "answered"].map((t) => (
           <div key={t} className="relative px-3 py-1.5 text-slate-300">
@@ -79,7 +79,7 @@ function GptNode({ id, data }) {
   return (
     <div className="w-[240px] rounded-lg border border-emerald-600 bg-slate-900 text-xs">
       <Handle type="target" position={Position.Left} id="in" />
-      <div className="border-b border-slate-700 px-2 py-1.5 font-semibold text-emerald-300">GPT clasifica</div>
+      <div className="border-b border-slate-700 px-2 py-1.5 font-semibold text-emerald-300">IA · análisis</div>
       <div>
         {labels.map((l) => (
           <div key={l.id} className="relative border-b border-slate-800 px-2 py-1.5">
@@ -110,7 +110,24 @@ function FlowRefNode({ data }) {
   );
 }
 
-const nodeTypes = { trigger: TriggerNode, stage: StageNode, gpt: GptNode, flowref: FlowRefNode };
+// Nota libre (estilo FigJam): texto suelto para anotar. No tiene handles → el serializador
+// la ignora (no afecta el flow-spec). Se puede mover y borrar.
+function NoteNode({ id, data }) {
+  const { updateNodeData } = useEditor();
+  return (
+    <div className="w-[200px] rounded-lg border border-yellow-600/60 bg-yellow-950/30 p-1.5">
+      <textarea
+        className="nodrag w-full resize-none border-0 bg-transparent text-xs text-yellow-100 placeholder:text-yellow-200/40 focus:outline-none"
+        rows={3}
+        value={data.text || ""}
+        onChange={(e) => updateNodeData(id, { text: e.target.value })}
+        placeholder="Nota…"
+      />
+    </div>
+  );
+}
+
+const nodeTypes = { trigger: TriggerNode, stage: StageNode, gpt: GptNode, flowref: FlowRefNode, note: NoteNode };
 
 // ── editor de la secuencia de seguimientos ──
 const stepType = (s) => (s.wait != null ? "wait" : s.stopIfAnswered ? "stop" : s.call ? "call" : s.stage != null ? "stage" : "wait");
@@ -177,7 +194,10 @@ export default function DrawFlow() {
   const [edges, setEdges] = useState(init.analisis.edges);
   const [project, setProject] = useState(init.project);
   const [description, setDescription] = useState(init.description);
-  const [stages, setStages] = useState(init.stages);
+  // El input de stages guarda el TEXTO CRUDO; el array se deriva. Así se pueden tipear comas
+  // y espacios sin que se borren (antes el value se re-derivaba del array y los comía).
+  const [stagesText, setStagesText] = useState(init.stages.join(", "));
+  const stages = useMemo(() => [...new Set(stagesText.split(",").map((s) => s.trim()).filter(Boolean))], [stagesText]);
   const [include, setInclude] = useState(init.include);
   const [seguimientos, setSeguimientos] = useState(init.seguimientos);
   const [cita, setCita] = useState(init.cita);
@@ -217,6 +237,15 @@ export default function DrawFlow() {
 
   const addStage = () => setNodes((nds) => [...nds, { id: `s${idc.current++}`, type: "stage", position: { x: 420, y: 520 }, data: { role: "" } }]);
   const addGpt = () => setNodes((nds) => [...nds, { id: `g${idc.current++}`, type: "gpt", position: { x: 420, y: 560 }, data: { labels: [] } }]);
+  const addNote = () => setNodes((nds) => [...nds, { id: `note${idc.current++}`, type: "note", position: { x: 420, y: 480 }, data: { text: "" } }]);
+
+  // Borra lo seleccionado (nodos borrables + sus aristas + aristas seleccionadas). Complementa
+  // la tecla Supr con un botón visible.
+  const deleteSelected = () => {
+    const del = new Set(nodesRef.current.filter((n) => n.selected && n.deletable !== false).map((n) => n.id));
+    setNodes((nds) => nds.filter((n) => !del.has(n.id)));
+    setEdges((eds) => eds.filter((e) => !e.selected && !del.has(e.source) && !del.has(e.target)));
+  };
 
   const spec = useMemo(
     () => modelToSpec({ project, description, stages, analisis: { nodes, edges }, include, seguimientos, cita }),
@@ -226,18 +255,18 @@ export default function DrawFlow() {
 
   const editorValue = useMemo(() => ({ stages, updateNodeData, onRemoveLabel }), [stages, updateNodeData, onRemoveLabel]);
 
-  // Edita la lista de stages y reconcilia los roles huérfanos (un rol borrado de la lista que
+  // Al SALIR del campo de stages, reconcilia los roles huérfanos (un rol borrado de la lista que
   // siga guardado en un nodo/cita/secuencia serializaría un stage que no está en spec.stages).
-  const onStagesChange = (text) => {
-    const next = text.split(",").map((s) => s.trim()).filter(Boolean);
-    setStages(next);
-    setNodes((nds) => nds.map((n) => (n.type === "stage" && n.data.role && !next.includes(n.data.role) ? { ...n, data: { ...n.data, role: "" } } : n)));
-    setCita((c) => (c.stage && !next.includes(c.stage) ? { ...c, stage: "" } : c));
+  // Se hace en blur, no en cada tecla, para no romper el tipeo de comas/espacios.
+  const reconcileStages = () => {
+    const valid = stages;
+    setNodes((nds) => nds.map((n) => (n.type === "stage" && n.data.role && !valid.includes(n.data.role) ? { ...n, data: { ...n.data, role: "" } } : n)));
+    setCita((c) => (c.stage && !valid.includes(c.stage) ? { ...c, stage: "" } : c));
     setSeguimientos((sg) => ({
       sequence: sg.sequence.map((s) => {
         let ns = s;
-        if (s.stage && !next.includes(s.stage)) ns = { ...ns, stage: "" };
-        if (ns.onAnswered?.stage && !next.includes(ns.onAnswered.stage)) { const { onAnswered, ...rest } = ns; ns = rest; }
+        if (s.stage && !valid.includes(s.stage)) ns = { ...ns, stage: "" };
+        if (ns.onAnswered?.stage && !valid.includes(ns.onAnswered.stage)) { const { onAnswered, ...rest } = ns; ns = rest; }
         return ns;
       }),
     }));
@@ -247,7 +276,7 @@ export default function DrawFlow() {
     const p = [];
     if (include.analisis_postllamada) {
       if (Object.keys(spec.flows.analisis_postllamada?.routes || {}).length === 0) {
-        p.push("El grafo de análisis no resuelve ninguna ruta: conectá una salida del trigger (dnc/dna/answered) a un stage con rol o a un GPT con etiquetas.");
+        p.push("El grafo de análisis no resuelve ninguna ruta: conectá una salida del trigger (dnc/dna/answered) a un stage con rol o a un nodo IA con etiquetas.");
       }
       for (const w of analisisProblems({ nodes, edges })) p.push(w);
     }
@@ -281,16 +310,18 @@ export default function DrawFlow() {
       <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">← Volver</Link>
       <h1 className="mt-3 text-3xl font-bold">Dibujar flujograma</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Conectá las salidas del trigger (dnc/dna/answered) a stages o a un nodo GPT. La salida <span className="text-slate-300">then</span> de un stage va a Seguimientos/Cita (enrollment).
+        Conectá las salidas del trigger (dnc/dna/answered) a stages o a un nodo de IA. La salida <span className="text-slate-300">then</span> de un stage va a Seguimientos/Cita (enrollment).
       </p>
 
       <div className="mt-6 flex flex-col gap-5 lg:flex-row">
         {/* canvas */}
         <div className="lg:flex-1">
-          <div className="mb-2 flex gap-2">
+          <div className="mb-2 flex flex-wrap gap-2">
             <button onClick={addStage} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs hover:border-slate-500">+ Stage</button>
-            <button onClick={addGpt} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs hover:border-slate-500">+ GPT Clasificación</button>
-            <span className="self-center text-[11px] text-slate-500">Supr borra lo seleccionado · arrastrá desde un punto para conectar</span>
+            <button onClick={addGpt} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs hover:border-slate-500">+ IA análisis</button>
+            <button onClick={addNote} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs hover:border-slate-500">+ Nota</button>
+            <button onClick={deleteSelected} className="rounded-lg border border-rose-800 bg-slate-900 px-3 py-1.5 text-xs text-rose-300 hover:border-rose-600">🗑 Borrar selección</button>
+            <span className="self-center text-[11px] text-slate-500">Clic para seleccionar · Supr o el botón para borrar · arrastrá desde un punto para conectar</span>
           </div>
           <div className="h-[600px] rounded-xl border border-slate-800 bg-slate-950">
             <EditorCtx.Provider value={editorValue}>
@@ -322,7 +353,7 @@ export default function DrawFlow() {
 
           <label className="block">
             <span className="mb-1 block text-xs text-slate-400">Stages (roles, separados por coma)</span>
-            <input value={stages.join(", ")} onChange={(e) => onStagesChange(e.target.value)} className={inputCls} />
+            <input value={stagesText} onChange={(e) => setStagesText(e.target.value)} onBlur={reconcileStages} className={inputCls} placeholder="lead_nuevo, dnc, dna, whatsapp, …" />
             <span className="mt-1 block text-[11px] text-slate-500">Estos roles aparecen en los dropdowns de los stages.</span>
           </label>
 
