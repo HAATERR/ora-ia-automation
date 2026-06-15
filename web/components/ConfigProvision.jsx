@@ -320,6 +320,12 @@ export default function ConfigProvision({ spec, project }) {
         {ghlError && <p className="text-sm text-rose-400">{ghlError}</p>}
       </section>
 
+      {!ghl && needsGhl && (
+        <p className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
+          ⚠️ Los dropdowns de <b>pipeline</b>, <b>stages</b> y <b>custom fields</b> se habilitan recién cuando completás el paso 1 (PIT + Location ID → “Cargar IDs de GHL”) y elegís el pipeline en el paso 2.
+        </p>
+      )}
+
       {/* Pipeline global */}
       {needsGhl && (
         <section className="space-y-2">
