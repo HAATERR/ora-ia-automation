@@ -38,8 +38,6 @@ const EXAMPLE_FLOW_SPEC = JSON.stringify({
       sequence: [
         { wait: '2h' },
         { call: true },
-        { wait: '24h' },
-        { call: true },
       ],
     },
     cita_agendada: {

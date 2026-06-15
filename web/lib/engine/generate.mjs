@@ -77,6 +77,11 @@ const enrollNode = (name, flow) => ({ name, type: 'n8n-nodes-base.httpRequest', 
   parameters: { method: 'POST', url: `{{ORA_WEBHOOK_${String(flow).toUpperCase()}}}`, sendBody: true, specifyBody: 'json',
     jsonBody: `={{ JSON.stringify({ contactId: $('Contacto').item.json.contactId }) }}`, options: {} } });
 
+// Saca al lead del seguimiento: pone el tag 'fin-seguimiento' (el flow seguimientos lo chequea
+// antes de cada llamada). Se usa SOLO en rutas/etiquetas que NO re-enrolan en seguimientos.
+const finSeguimientoNode = (name) =>
+  httpGhl(name, 'POST', `=${GHL}/contacts/{{ $('Contacto').item.json.contactId }}/tags`, tagsBody('fin-seguimiento'));
+
 // acción de una etiqueta GPT: { stage, gptReasonRef?, then? } → devuelve nodo de entrada
 function buildLabelAction(wb, label, la, x, y) {
   let entry, tail;
@@ -92,6 +97,12 @@ function buildLabelAction(wb, label, la, x, y) {
     entry = up; tail = up;
   }
   if (la.then) { const en = `Enrolar → ${la.then} (${label})`; wb.add(enrollNode(en, la.then), x + 680, y); wb.link(tail, en); }
+  // Si esta etiqueta NO devuelve al lead al seguimiento, lo saca (tag fin-seguimiento).
+  if (la.then !== 'seguimientos') {
+    const fin = `GHL · Fin seguimiento (${label})`;
+    wb.add(finSeguimientoNode(fin), x - 220, y);
+    wb.link(fin, entry); entry = fin;
+  }
   return entry;
 }
 
@@ -120,7 +131,14 @@ function buildRouteAction(wb, key, action, x, y) {
   const up = `GHL · Stage ${key}`;
   wb.add(httpGhl(up, 'POST', GHL + '/opportunities/upsert', upsertBody(stageTok(action.stage))), x, y);
   if (action.then) { const en = `Enrolar → ${action.then} (${key})`; wb.add(enrollNode(en, action.then), x + 220, y); wb.link(up, en); }
-  return up;
+  // Si esta ruta NO devuelve al lead al seguimiento, lo saca (tag fin-seguimiento).
+  let entry = up;
+  if (action.then !== 'seguimientos') {
+    const fin = `GHL · Fin seguimiento (${key})`;
+    wb.add(finSeguimientoNode(fin), x - 220, y);
+    wb.link(fin, up); entry = fin;
+  }
+  return entry;
 }
 
 function compileAnalisis(flow) {
@@ -138,16 +156,7 @@ function compileAnalisis(flow) {
   let prev = 'GHL · Update Call Summary', prevOut = 0, x = 1460, y = 360;
   routes.forEach(([tag, action], i) => {
     const isLast = i === routes.length - 1;
-    let entry = buildRouteAction(wb, tag, action, x + 220, y + 180);
-    // Si la llamada fue CONTESTADA (o DNC = no contactar), sacar al lead del seguimiento:
-    // ponemos el tag 'fin-seguimiento'; el flow de seguimientos lo chequea antes de cada
-    // llamada y se frena. Así la decisión "contestó / no" vive acá, no en seguimientos.
-    if (tag === 'answered' || tag === 'dnc') {
-      const stopNode = `GHL · Fin seguimiento (${tag})`;
-      wb.add(httpGhl(stopNode, 'POST', `=${GHL}/contacts/{{ $('Contacto').item.json.contactId }}/tags`, tagsBody('fin-seguimiento')), x + 220, y + 100);
-      wb.link(stopNode, entry);
-      entry = stopNode;
-    }
+    const entry = buildRouteAction(wb, tag, action, x + 220, y + 180);
     if (isLast) { wb.link(prev, entry, prevOut); }
     else { const ifn = `¿tag = ${tag}?`; wb.add(ifNode(ifn, "={{ $('Contacto').item.json.tag }}", tag), x, y); wb.link(prev, ifn, prevOut); wb.link(ifn, entry, 0); prev = ifn; prevOut = 1; x += 220; y += 180; }
   });

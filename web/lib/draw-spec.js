@@ -166,10 +166,10 @@ export function defaultModel() {
     analisis: { nodes, edges },
     include: { analisis_postllamada: true, seguimientos: true, cita_agendada: true },
     seguimientos: {
+      // one-shot: esperar → lanzar llamada. El ciclo lo continúa Análisis re-enrolando
+      // (dna / "llamada ia"); whatsapp/manual/dnc no re-enrolan y frenan el seguimiento.
       sequence: [
         { wait: "2h" },
-        { call: true },
-        { wait: "24h" },
         { call: true },
       ],
     },
