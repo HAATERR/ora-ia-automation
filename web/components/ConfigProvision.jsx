@@ -82,6 +82,10 @@ export default function ConfigProvision({ spec, project }) {
   const cfOptions = ghl?.customFields || [];
 
   async function loadGhl() {
+    if (!pit.trim() || !locationId.trim()) {
+      setGhlError("Completá el PIT y el Location ID de la subcuenta primero.");
+      return;
+    }
     setGhlError(null);
     setGhlLoading(true);
     try {
@@ -262,10 +266,11 @@ export default function ConfigProvision({ spec, project }) {
             <input value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="HOu6..." className={inputCls} />
           </label>
         </div>
+        <p className="text-[11px] text-slate-500">Pegá el PIT y el Location ID de la subcuenta, después tocá el botón para traer pipelines, stages y custom fields.</p>
         <div className="flex items-center gap-3">
           <button
             onClick={loadGhl}
-            disabled={!pit || !locationId || ghlLoading}
+            disabled={ghlLoading}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
           >
             {ghlLoading ? "Cargando…" : ghl ? "Recargar IDs de GHL" : "Cargar IDs de GHL"}
