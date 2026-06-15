@@ -1,0 +1,1222 @@
+{
+  "name": "Chatbot Primedental",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "{{ORA_WEBHOOK_PATH}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        -112
+      ],
+      "id": "e070a9f5-49a8-474c-a3b4-3ce3b7186fe5",
+      "name": "Webhook",
+      "webhookId": "{{ORA_WEBHOOK_ID}}"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "{{ORA_PROMPT}}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -16
+      ],
+      "id": "96bb4dbe-4ea5-466e-bbdb-c7266eb0fa37",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4-mini"
+        },
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        224
+      ],
+      "id": "2fb1908d-551f-494d-bf2b-e36f5a7e7978",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "{{ORA_OPENAI_CRED_ID}}",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e3066bd2-f4d8-4592-9554-06b35c39e940",
+              "leftValue": "={{ $json.contacts[0].id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": "={{ false }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        -112
+      ],
+      "id": "4fe464ec-0eed-494a-8c05-9e366716c690",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c82e965e-d995-44e3-b866-025cc094965d",
+              "name": "Contact_id",
+              "value": "={{ $('Webhook').item.json.body.contact_id }}",
+              "type": "string"
+            },
+            {
+              "id": "ab4fe89d-1e37-4ab1-9e38-5302e0e5de73",
+              "name": "location_id",
+              "value": "={{ORA_LOCATION_ID}}",
+              "type": "string"
+            },
+            {
+              "id": "4ce00fb1-6f56-4cef-9ea2-b42287940a03",
+              "name": "phone",
+              "value": "={{ $('Webhook').item.json.body.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "48572adf-91f8-4bf1-9860-4a182bc6d715",
+              "name": "message",
+              "value": "={{ $('Webhook').item.json.body.customData.message }}",
+              "type": "string"
+            },
+            {
+              "id": "3918ecba-34a8-4144-aa0a-d5fa06d8378b",
+              "name": "name",
+              "value": "={{ $('Webhook').item.json.body.first_name }}",
+              "type": "string"
+            },
+            {
+              "id": "4797c0dc-a301-423b-b49f-8bd2c69ac46b",
+              "name": "seguimie",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        -96
+      ],
+      "id": "6b6cf9bb-65ed-4410-980b-178cffd1a430",
+      "name": "Define data",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.phone }}",
+        "contextWindowLength": 25
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        224
+      ],
+      "id": "5fa56c6c-d3ba-418d-8482-d50694981bd5",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawOutput = $json.output ?? '';\n\nlet parsed = {};\nlet msg = String(rawOutput);\n\ntry {\n  const cleaned = String(rawOutput)\n    .trim()\n    .replace(/^```json\\s*/i, '')\n    .replace(/```$/i, '');\n\n  parsed = JSON.parse(cleaned);\n  msg = parsed.message ?? msg;\n} catch (e) {\n  parsed = {};\n}\n\nconst safeMessage = String(msg)\n  .replace(/\\\\/g, '\\\\\\\\')\n  .replace(/\\r?\\n/g, '\\\\n')\n  .replace(/\\t/g, '\\\\t')\n  .replace(/\"/g, '\\\\\"');\n\nlet contactId = '';\n\ntry {\n  contactId = $('HTTP Request1').first().json.contacts?.[0]?.id || '';\n} catch (e) {}\n\ntry {\n  contactId = contactId || $('HTTP Request2').first().json.contact?.id || $('HTTP Request2').first().json.id || '';\n} catch (e) {}\n\nconst startTime =\n  parsed.startTime ??\n  parsed.start_time ??\n  $json.startTime ??\n  $json.start_time ??\n  '';\n\nconst endTime =\n  parsed.endTime ??\n  parsed.end_time ??\n  $json.endTime ??\n  $json.end_time ??\n  '';\n\nreturn [\n  {\n    json: {\n      ...$json,\n      safeMessage,\n      contactId,\n      calendarId: \"6Lb3KSeoJqjXAmXkAU99\",\n      locationId: \"Hp6PghlkNYxLuOCVOgUx\",\n      startTime,\n      endTime\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -16
+      ],
+      "id": "0d0aa68f-315a-42d7-9b82-9a274bc985ba",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/contacts/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"locationId\": \"{{ORA_LOCATION_ID}}\",\n  \"pageLimit\": 10,\n  \"filters\": [\n    {\n      \"field\": \"phone\",\n      \"operator\": \"eq\",\n      \"value\": \"{{ $json.body.phone }}\"\n    }\n  ]\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -448,
+        -112
+      ],
+      "id": "8d4c347a-764a-48b1-917a-00121324bf06",
+      "name": "HTTP Request1",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node\nreturn items.map(item => {\n  // Ajuste para tu estructura actual (viene en body.phone)\n  const rawPhone = item.json?.body?.phone ?? item.json?.phone ?? '';\n\n  // Convertir a string y limpiar espacios extremos\n  let phone = String(rawPhone).trim();\n\n  // Quitar todo excepto dígitos y \"+\"\n  // (ej: \"+52 155-3523(0764)\" -> \"+5215535230764\")\n  phone = phone.replace(/[^\\d+]/g, '');\n\n  // Si hay más de un \"+\", dejar solo el primero al inicio\n  if ((phone.match(/\\+/g) || []).length > 1) {\n    phone = '+' + phone.replace(/\\+/g, '');\n  }\n\n  // Si el \"+\" quedó en el medio, moverlo al inicio\n  if (phone.includes('+') && !phone.startsWith('+')) {\n    phone = '+' + phone.replace(/\\+/g, '');\n  }\n\n  // OPCIONAL:\n  // Si no viene con +, agregárselo automáticamente\n  if (phone && !phone.startsWith('+')) {\n    phone = '+' + phone;\n  }\n\n  // Guardar valor normalizado en un campo nuevo\n  item.json.normalizedPhone = phone;\n\n  // Si querés también pisar el original del body:\n  if (item.json.body && item.json.body.phone) {\n    item.json.body.phone = phone;\n  }\n\n  return item;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        -112
+      ],
+      "id": "74556977-e797-4f7f-8429-62cd7bb92fbc",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/contacts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "locationId",
+              "value": "{{ORA_LOCATION_ID}}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $('Webhook').item.json.body.name }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $('Webhook').item.json.body.phone }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        -176
+      ],
+      "id": "cb879321-60ef-42ca-8411-c95ff4bdda3a",
+      "name": "HTTP Request2",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c82e965e-d995-44e3-b866-025cc094965d",
+              "name": "Contact_id",
+              "value": "=69FRhUaVmMjKKgbpdxAJ",
+              "type": "string"
+            },
+            {
+              "id": "ab4fe89d-1e37-4ab1-9e38-5302e0e5de73",
+              "name": "location_id",
+              "value": "={{ORA_LOCATION_ID}}",
+              "type": "string"
+            },
+            {
+              "id": "4ce00fb1-6f56-4cef-9ea2-b42287940a03",
+              "name": "phone",
+              "value": "={{ $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "48572adf-91f8-4bf1-9860-4a182bc6d715",
+              "name": "message",
+              "value": "={{ $json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "3918ecba-34a8-4144-aa0a-d5fa06d8378b",
+              "name": "name",
+              "value": "=Kevin",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        144
+      ],
+      "id": "acb3e650-f2dc-4364-8c1e-3d938a64ba92",
+      "name": "Define data1",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        144
+      ],
+      "id": "c0a819e3-794f-48b3-a052-731703adee19",
+      "name": "When chat message received",
+      "webhookId": "4aa4a413-67ff-486a-9887-7f0cb4af8e93"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ORA_GHL_CALL_HOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"client_id\": \"{{ORA_SIMPLETALK_CLIENT_ID}}\",\n  \"firstName\": null,\n  \"lastName\": null,\n  \"from_number\": \"{{ORA_FROM_NUMBER}}\",\n  \"to_number\": \"+5492494628103\",\n  \"call_type\": \"outbound\",\n  \"phone\": \"{{ORA_FROM_NUMBER}}\",\n  \"email\": null,\n  \"transcript\": \"\\n[00:04.35] BOT: Hola ¿hablo con Luca ?\",\n  \"recording_link\": \"https://recordings.simpletalk.ai/?id=f1e6bc77-b899-470b-bd3b-04dbee98b0cd\",\n  \"tags\": [\n    \"dna\"\n  ],\n  \"appointment\": null,\n  \"call_duration\": null,\n  \"match_id\": null,\n  \"questions_and_answers\": null,\n  \"headers\": {\n    \"host\": \"services.leadconnectorhq.com\",\n    \"cf-ray\": \"9db428a78b73b49c-IAD\",\n    \"x-forwarded-for\": \"44.199.83.166,10.10.0.250\",\n    \"content-type\": \"application/json\",\n    \"cdn-loop\": \"cloudflare; loops=1\",\n    \"accept-encoding\": \"gzip, br\",\n    \"user-agent\": \"python-requests/2.31.0\",\n    \"x-forwarded-proto\": \"https\",\n    \"accept\": \"*/*\",\n    \"cf-ipcountry\": \"US\",\n    \"cf-visitor\": {\n      \"scheme\": \"https\"\n    },\n    \"cf-connecting-ip\": \"44.199.83.166\",\n    \"content-length\": \"458\",\n    \"x-envoy-external-address\": \"10.10.0.250\",\n    \"x-request-id\": \"8555e5d4-15ad-4b36-a90f-6a8c22edc35f\",\n    \"x-envoy-attempt-count\": \"1\",\n    \"x-forwarded-client-cert\": \"By=spiffe://cluster.local/ns/default/sa/default-automation-workflows;Hash=0fb0442232aac84e40052cb85d8e49f708daa97d7f2c9826bda75e9e07cf4163;Subject=\\\"\\\";URI=spiffe://cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account\",\n    \"x-b3-traceid\": \"8d8dd87d1e60823885c8f0ab9dcbc1dd\",\n    \"x-b3-spanid\": \"14449f6dffb20c84\",\n    \"x-b3-parentspanid\": \"85c8f0ab9dcbc1dd\",\n    \"x-b3-sampled\": \"0\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1920,
+        640
+      ],
+      "id": "50cf72e7-14f9-4a3d-a845-957d775f6db4",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Usa esta tool para ponerle la etiqueta al usuario cuando comenta que no le interesa o que no le escriban mas",
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/contacts/{{ $json.Contact_id }}/tags ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"tags\": [\n    \"perdido\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        752,
+        224
+      ],
+      "id": "f313dd49-253d-4e21-84eb-19b533af8996",
+      "name": "perdido"
+    },
+    {
+      "parameters": {
+        "content": "se cambia el ID del calendario\nse cambia el ID del location por la sub account ID\n",
+        "height": 96,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1392,
+        1248
+      ],
+      "typeVersion": 1,
+      "id": "3cf031c6-e2b6-4faf-993b-b7e99e1a0154",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Preguntas Chatbot\npara confirmar su configuracion\n\n\n1. que ponga etquitea\n\n2. que pueda gener una apointement\n\n3. que responda bien la informacion del cliente\n\n4. no invente informacion\n\n5. flujo siga bien\n\n",
+        "height": 288,
+        "width": 224
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -272,
+        192
+      ],
+      "typeVersion": 1,
+      "id": "9e9e9dd4-3601-4adc-b25c-53dad7b87726",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "aqui van todos los actios que se requieren dependiendo el documento que quiera el cliente por ejemplo el cliente quiere que agende en mas calendarios por ejemplo entonces se agregaron mas calendario\n",
+        "height": 96,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        880,
+        416
+      ],
+      "typeVersion": 1,
+      "id": "577704a9-1b24-4bdf-a2ba-f65a5260bff6",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "Vas a private integratios\ncreas una integracion con los siguientes Scops :\n\n.Son Todos los Scopps menos uno que salen amarillo\n\n\n",
+        "height": 96,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -176,
+        -304
+      ],
+      "typeVersion": 1,
+      "id": "4ea80905-4d00-4a0e-a422-d4827f573369",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Usa esta tool para CREAR la cita en el calendario de CDMX. Solo llamarla DESPUÉS de: haber consultado get_availability_cdmx en la conversación, que el horario exacto haya aparecido en los slots devueltos, que el lead confirme ese horario, y tener su nombre completo y correo. PROHIBIDO crear una cita sin haber consultado disponibilidad antes, o con un horario que no vino en get_availability_cdmx.",
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/calendars/events/appointments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "calendarId",
+              "value": "{{ORA_CAL_CDMX}}"
+            },
+            {
+              "name": "locationId",
+              "value": "={{ORA_LOCATION_ID}}"
+            },
+            {
+              "name": "contactId",
+              "value": "={{ $json.Contact_id }}"
+            },
+            {
+              "name": "startTime",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', `Fecha y hora exacta de inicio de la cita en formato ISO 8601 completo con zona horaria. Ejemplo: 2026-04-14T13:00:00-06:00. Nunca enviar texto natural como “hoy a la 1”.`, 'string') }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters4_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1104,
+        224
+      ],
+      "id": "b6378f1b-8b8d-4528-a7c0-3492fdfa3d32",
+      "name": "agendar_cdmx"
+    },
+    {
+      "parameters": {
+        "toolDescription": "OBLIGATORIO usar esta tool SIEMPRE que el lead, con sucursal Querétaro, mencione, pregunte o proponga cualquier día u hora, ANTES de decir cualquier horario. Consulta los horarios libres reales del calendario de Querétaro (Hospital Moscati, Juriquilla). PROHIBIDO responder disponibilidad de memoria o inventar horarios. Si el lead dice un día, una hora o ambos, llamar esta tool primero, sin excepción, y responder solo con los slots que devuelva. No confirmar ningún horario sin haberla llamado en este mismo turno.",
+        "url": "https://services.leadconnectorhq.com/calendars/{{ORA_CAL_QUERETARO}}/free-slots",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "startDate",
+              "value": "={{ $now.toMillis() }}"
+            },
+            {
+              "name": "=endDate",
+              "value": "={{ $now.plus(15, 'days').toMillis() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1280,
+        224
+      ],
+      "id": "049b40d4-313b-46c2-bd07-4e778ba6aabc",
+      "name": "get_availability_queretaro"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Usa esta tool para CREAR la cita en el calendario de Querétaro. Solo llamarla DESPUÉS de: haber consultado get_availability_queretaro en la conversación, que el horario exacto haya aparecido en los slots devueltos, que el lead confirme ese horario, y tener su nombre completo y correo. PROHIBIDO crear una cita sin haber consultado disponibilidad antes, o con un horario que no vino en get_availability_queretaro.",
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/calendars/events/appointments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "calendarId",
+              "value": "{{ORA_CAL_QUERETARO}}"
+            },
+            {
+              "name": "locationId",
+              "value": "={{ORA_LOCATION_ID}}"
+            },
+            {
+              "name": "contactId",
+              "value": "={{ $json.Contact_id }}"
+            },
+            {
+              "name": "startTime",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', `Fecha y hora exacta de inicio de la cita en formato ISO 8601 completo con zona horaria. Ejemplo: 2026-04-14T13:00:00-06:00. Nunca enviar texto natural como “hoy a la 1”.`, 'string') }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters4_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1424,
+        224
+      ],
+      "id": "ca3eec62-487c-4ae6-8157-83a8a4798f9d",
+      "name": "agendar_queretaro"
+    },
+    {
+      "parameters": {
+        "toolDescription": "OBLIGATORIO usar esta tool SIEMPRE que el lead foráneo (valoración virtual) mencione, pregunte o proponga cualquier día u hora, ANTES de decir cualquier horario. Consulta los horarios libres reales del calendario de Valoración Virtual por videollamada. PROHIBIDO responder disponibilidad de memoria o inventar horarios. Llamar esta tool primero, sin excepción, y responder solo con los slots que devuelva. No confirmar ningún horario sin haberla llamado en este mismo turno.",
+        "url": "https://services.leadconnectorhq.com/calendars/{{ORA_CAL_VIRTUAL}}/free-slots",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "startDate",
+              "value": "={{ $now.toMillis() }}"
+            },
+            {
+              "name": "=endDate",
+              "value": "={{ $now.plus(15, 'days').toMillis() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1584,
+        224
+      ],
+      "id": "2540147d-96c4-4731-8f3b-e30ec57ed7e9",
+      "name": "get_availability_virtual"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Usa esta tool para CREAR la valoración virtual en el calendario. Solo llamarla DESPUÉS de: haber consultado get_availability_virtual, que el horario exacto haya aparecido en los slots, que el lead confirme, y tener su nombre completo y correo (obligatorio para mandar el link). PROHIBIDO crear una cita sin consultar disponibilidad antes, o con un horario que no vino en get_availability_virtual.",
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/calendars/events/appointments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "calendarId",
+              "value": "{{ORA_CAL_VIRTUAL}}"
+            },
+            {
+              "name": "locationId",
+              "value": "={{ORA_LOCATION_ID}}"
+            },
+            {
+              "name": "contactId",
+              "value": "={{ $json.Contact_id }}"
+            },
+            {
+              "name": "startTime",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', `Fecha y hora exacta de inicio de la cita en formato ISO 8601 completo con zona horaria. Ejemplo: 2026-04-14T13:00:00-06:00. Nunca enviar texto natural como “hoy a la 1”.`, 'string') }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters4_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1760,
+        224
+      ],
+      "id": "72651caa-975c-4d8e-9ade-9c0bfe0eaacb",
+      "name": "agendar_virtual"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/conversations/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"contactId\": \"{{ $('Define data').item.json.Contact_id }}\",\n  \"message\": \"{{ $json.safeMessage }}\",\n  \"attachments\": []\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1920,
+        -16
+      ],
+      "id": "86e975c9-1aa1-4882-bbdf-3499ceebb093",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "content": "se tiene que desconectar el HHTP Request para poder probar al chatbot\n",
+        "height": 96,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1712,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "69d25f4c-c32a-4fcd-a372-cef4a9e51e3c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "el calendar ID y el location ID deben ser cambiados asi como el private integrations osea el Bearer\n",
+        "height": 96,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1440,
+        432
+      ],
+      "typeVersion": 1,
+      "id": "60739767-f70f-46c7-bbef-a7055c3b3e9f",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "falta cambiar el contact ID por uno de GHL\n\ny el location ID",
+        "height": 96,
+        "width": 208
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        160,
+        320
+      ],
+      "typeVersion": 1,
+      "id": "db365a90-93be-41cf-8889-54741320fe27",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "OBLIGATORIO usar esta tool SIEMPRE que el lead, con sucursal CDMX, mencione, pregunte o proponga cualquier día u hora, ANTES de decir cualquier horario. Consulta los horarios libres reales del calendario de CDMX (Calle Indiana 260, Col. Ciudad de los Deportes). PROHIBIDO responder disponibilidad de memoria o inventar horarios. Si el lead dice un día (ej. \"el miércoles\"), una hora (ej. \"a las 2\") o ambos, llamar esta tool primero, sin excepción, y responder solo con los slots que devuelva. No confirmar ningún horario sin haberla llamado en este mismo turno.",
+        "url": "https://services.leadconnectorhq.com/calendars/{{ORA_CAL_CDMX_AVAIL}}/free-slots",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "starDate",
+              "value": "={{ $now.toMillis() }}"
+            },
+            {
+              "name": "endDate",
+              "value": "={{ $now.plus(15, 'days').toMillis() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        432,
+        464
+      ],
+      "id": "efc2f7fb-da4e-435a-9504-d253e60581ae",
+      "name": "sad"
+    },
+    {
+      "parameters": {
+        "toolDescription": "OBLIGATORIO usar esta tool SIEMPRE que el lead, con sucursal Querétaro, mencione, pregunte o proponga cualquier día u hora, ANTES de decir cualquier horario. Consulta los horarios libres reales del calendario de Querétaro (Hospital Moscati, Juriquilla). PROHIBIDO responder disponibilidad de memoria o inventar horarios. Si el lead dice un día, una hora o ambos, llamar esta tool primero, sin excepción, y responder solo con los slots que devuelva. No confirmar ningún horario sin haberla llamado en este mismo turno.",
+        "url": "https://services.leadconnectorhq.com/calendars/{{ORA_CAL_CDMX}}/free-slots",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "startDate",
+              "value": "={{ $now.toMillis() }}"
+            },
+            {
+              "name": "=endDate",
+              "value": "={{ $now.plus(15, 'days').toMillis() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        928,
+        224
+      ],
+      "id": "adc43fbe-27ea-4366-9ea3-46dcf0451502",
+      "name": "get_availability_cdmx"
+    },
+    {
+      "parameters": {
+        "content": "cambiar el calendar ID del get availability del URL\n\n\n",
+        "height": 80,
+        "width": 176
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        656,
+        416
+      ],
+      "typeVersion": 1,
+      "id": "d092e1d3-5716-4218-8ca5-ff7702ec3324",
+      "name": "Sticky Note8"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "primary-production-ae769.up.railway.app",
+            "user-agent": "axios/1.13.2",
+            "content-length": "720",
+            "accept": "application/json, text/plain, */*",
+            "accept-encoding": "gzip, compress, deflate, br",
+            "content-type": "application/json",
+            "traceparent": "00-795d9117d525b5b5ac07b60083469bf4-3f619959873aa2e8-00",
+            "x-forwarded-for": "35.238.190.142",
+            "x-forwarded-host": "primary-production-ae769.up.railway.app",
+            "x-forwarded-proto": "https",
+            "x-railway-edge": "railway/us-west2",
+            "x-railway-request-id": "rsuOJ-8QQ9SyNGGj9I3ezw",
+            "x-real-ip": "35.238.190.142",
+            "x-request-start": "1779151465265"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "contact_id": "5ruHmYBQx4bhF7wa5xxn",
+            "first_name": "Enzo",
+            "last_name": "ORA IA",
+            "full_name": "Enzo ORA IA",
+            "phone": "+5492494206082",
+            "tags": "[whatsapp] - lead capture,[device] - sisu sales,javier",
+            "country": "US",
+            "date_created": "2026-05-19T00:43:43.380Z",
+            "full_address": "",
+            "contact_type": "lead",
+            "location": {
+              "name": "SISU",
+              "address": "New York",
+              "city": "New York",
+              "state": "New York",
+              "country": "US",
+              "postalCode": "07008",
+              "fullAddress": "New York, New York New York 07008",
+              "id": "{{ORA_LOCATION_ID}}"
+            },
+            "message": {
+              "type": 20,
+              "body": "Hola"
+            },
+            "workflow": {
+              "id": "fcc94543-42bd-4e76-bfa8-37400691f850",
+              "name": "WhatsApp"
+            },
+            "triggerData": {},
+            "customData": {
+              "id": "5ruHmYBQx4bhF7wa5xxn",
+              "name": "Enzo",
+              "message": "Hola",
+              "phone": "+54 9 249 420-6082"
+            }
+          },
+          "webhookUrl": "https://primary-production-ae769.up.railway.app/webhook/28909",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Define data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Define data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define data1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Define data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "perdido": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agendar_cdmx": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_availability_queretaro": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agendar_queretaro": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_availability_virtual": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agendar_virtual": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sad": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "get_availability_cdmx": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f4799ab7-a4f5-4c22-b818-7f2d0045d0a0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "715eff677cdd67ba04b1c75c9ebfb6c32867f1e6e04a3572088f1fd56e1d7a30"
+  },
+  "id": "wilzWWayZsJ2q55L",
+  "tags": []
+}

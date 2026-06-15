@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ora-ia/automation/client.schema.json",
+  "title": "Config de cliente Ora IA",
+  "type": "object",
+  "required": ["clientName", "locationId", "ghlPrivateToken", "templates"],
+  "additionalProperties": true,
+  "properties": {
+    "clientName": {
+      "type": "string",
+      "description": "Slug del cliente (usado en nombres de credencial/workflows)."
+    },
+    "locationId": {
+      "type": "string",
+      "description": "ID de la subcuenta (Location) en GHL."
+    },
+    "ghlPrivateToken": {
+      "type": "string",
+      "description": "Private Integration Token de la subcuenta. Acepta '@ruta/al/token.txt' para leerlo de un archivo (recomendado: no commitearlo)."
+    },
+    "credentialName": {
+      "type": "string",
+      "description": "Nombre de la credencial Custom Auth a crear en n8n. Default: 'GHL - <clientName>'."
+    },
+    "templates": {
+      "type": "array",
+      "description": "Workflows a clonar para este cliente.",
+      "items": {
+        "type": "object",
+        "required": ["name", "file"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "description": "Nombre del workflow nuevo en n8n." },
+          "file": { "type": "string", "description": "Ruta al template (.json)." },
+          "activate": { "type": "boolean", "default": false, "description": "Activar el workflow tras crearlo." },
+          "tokens": {
+            "type": "object",
+            "description": "Tokens propios de este template (se suman a los automáticos). Valor con '@archivo' se lee de disco.",
+            "additionalProperties": { "type": ["string", "number", "boolean", "object", "array"] }
+          }
+        }
+      }
+    },
+    "outcomeMap": {
+      "type": "object",
+      "description": "El 'flujograma': resultado de la llamada → acciones. Se inyecta como {{ORA_OUTCOME_MAP}}.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "addTags": { "type": "array", "items": { "type": "string" } },
+          "removeTags": { "type": "array", "items": { "type": "string" } },
+          "moveToStage": { "type": "string", "description": "pipelineStageId destino (sale del --dry-run)." }
+        }
+      }
+    }
+  }
+}

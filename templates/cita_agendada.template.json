@@ -1,0 +1,119 @@
+{
+  "name": "Cita Agendada (template)",
+  "nodes": [
+    {
+      "name": "Webhook · Cita agendada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "{{ORA_WEBHOOK_PATH}}",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "{{ORA_WEBHOOK_ID}}",
+      "id": "n1",
+      "position": [
+        220,
+        400
+      ]
+    },
+    {
+      "name": "GHL · Stage Éxito",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineId: \"{{ORA_PIPELINE_ID}}\", locationId: \"{{ORA_LOCATION_ID}}\", contactId: $('Webhook · Cita agendada').item.json.body.contactId, pipelineStageId: \"{{ORA_STAGE_EXITO}}\", status: \"won\", name: \"Cita agendada\" }) }}",
+        "options": {}
+      },
+      "id": "n2",
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "name": "Tag recordatorios (GHL)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/contacts/{{ $('Webhook · Cita agendada').item.json.body.contactId }}/tags",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tags: [\"{{ORA_TAG_RECORDATORIOS}}\"] }) }}",
+        "options": {}
+      },
+      "id": "n3",
+      "position": [
+        660,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook · Cita agendada": {
+      "main": [
+        [
+          {
+            "node": "GHL · Stage Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL · Stage Éxito": {
+      "main": [
+        [
+          {
+            "node": "Tag recordatorios (GHL)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

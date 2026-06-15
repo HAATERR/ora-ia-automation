@@ -1,0 +1,29 @@
+{
+  "$schema": "../client.schema.json",
+  "clientName": "primedental",
+  "locationId": "HOu6MLCtyRHFV3egUmXK",
+  "ghlPrivateToken": "@secrets/primedental.pit",
+  "credentialName": "GHL - primedental",
+
+  "templates": [
+    {
+      "name": "Chatbot - primedental (TEST)",
+      "file": "templates/chatbot.template.json",
+      "activate": false,
+      "tokens": {
+        "ORA_WEBHOOK_PATH": "primedental-chatbot-test",
+        "ORA_PROMPT": "@prompts/primedental.txt",
+        "ORA_CAL_CDMX": "Wss5UyH8YZpdMTgl60tP",
+        "ORA_CAL_CDMX_AVAIL": "SQGC53TXesIU6diRfTqD",
+        "ORA_CAL_QUERETARO": "CcF9n3GCjyhldRMyecou",
+        "ORA_CAL_VIRTUAL": "2oNeOjoF7eVb8H0ipTtW",
+        "ORA_FROM_NUMBER": "+14125286474",
+        "ORA_SIMPLETALK_CLIENT_ID": "652416827",
+        "ORA_GHL_CALL_HOOK_URL": "https://services.leadconnectorhq.com/hooks/ExtFmRLxMpnunKQuDAVi/webhook-trigger/c710a078-41ee-4c58-a787-f89ed68bfef2",
+        "ORA_OPENAI_CRED_ID": "rBBBEdja6W2XEO5s"
+      }
+    }
+  ],
+
+  "_comment": "Config de TEST: activate=false (lo creo inactivo para que lo revises en n8n antes de activar) y webhook path con sufijo -test para no chocar con el chatbot real de Primedental."
+}

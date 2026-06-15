@@ -1,0 +1,74 @@
+{
+  "$schema": "../client.schema.json",
+  "$comment": "PLANTILLA de config de cliente. Copiá este archivo a <cliente>.client.json y completá. Los REEMPLAZAR_* salen del --dry-run (pipelines, stages, custom fields) o de GHL/n8n. Quitá los flows que ese cliente no use. Los tokens ORA_WEBHOOK_<FLOW> (enrollment) los inyecta el motor solo.",
+
+  "clientName": "acme",
+  "locationId": "REEMPLAZAR_LOCATION_ID",
+  "ghlPrivateToken": "@secrets/acme.pit",
+
+  "templates": [
+    {
+      "name": "Analisis Post-Llamada - acme",
+      "file": "templates/analisis_postllamada.template.json",
+      "activate": true,
+      "tokens": {
+        "ORA_WEBHOOK_PATH": "acme-analisis",
+        "ORA_PIPELINE_ID": "REEMPLAZAR (--dry-run)",
+        "ORA_STAGE_DNC": "REEMPLAZAR",
+        "ORA_STAGE_DNA": "REEMPLAZAR",
+        "ORA_STAGE_WHATSAPP": "REEMPLAZAR",
+        "ORA_STAGE_SEGUIMIENTO": "REEMPLAZAR",
+        "ORA_STAGE_EXITO": "REEMPLAZAR",
+        "ORA_STAGE_NO_CALIFICADO": "REEMPLAZAR",
+        "ORA_CF_TRANSCRIPT": "REEMPLAZAR (custom field AI Transcript)",
+        "ORA_CF_RECORDING": "REEMPLAZAR (custom field AI Recording Link)",
+        "ORA_CF_DURATION": "REEMPLAZAR (custom field call_duration)",
+        "ORA_OPENAI_CRED_ID": "REEMPLAZAR (id de la cred OpenAI en n8n, con cupo)",
+        "ORA_OPENAI_MODEL": "gpt-4o-mini",
+        "ORA_GPT_CLASSIFY_PROMPT": "@prompts/acme-clasificacion.txt",
+        "ORA_GPT_REASON_PROMPT": "@prompts/acme-motivo.txt"
+      }
+    },
+    {
+      "name": "Seguimientos - acme",
+      "file": "templates/seguimientos.template.json",
+      "activate": true,
+      "tokens": {
+        "ORA_WEBHOOK_PATH": "acme-seguimientos",
+        "ORA_PIPELINE_ID": "REEMPLAZAR",
+        "ORA_STAGE_SEGUIMIENTO": "REEMPLAZAR",
+        "ORA_STAGE_WHATSAPP": "REEMPLAZAR",
+        "ORA_TAG_LLAMAR": "llamar"
+      }
+    },
+    {
+      "name": "Cita Agendada - acme",
+      "file": "templates/cita_agendada.template.json",
+      "activate": true,
+      "tokens": {
+        "ORA_WEBHOOK_PATH": "acme-cita",
+        "ORA_PIPELINE_ID": "REEMPLAZAR",
+        "ORA_STAGE_EXITO": "REEMPLAZAR",
+        "ORA_TAG_RECORDATORIOS": "recordatorios-cita"
+      }
+    },
+    {
+      "name": "Chatbot - acme",
+      "file": "templates/chatbot.template.json",
+      "activate": true,
+      "$comment": "El chatbot sale del export del cliente (ver docs/GUIA.md §6 bis). Quitá este bloque si todavía no lo templatizaste.",
+      "tokens": {
+        "ORA_WEBHOOK_PATH": "acme-chatbot",
+        "ORA_PROMPT": "@prompts/acme.txt",
+        "ORA_OPENAI_CRED_ID": "REEMPLAZAR",
+        "ORA_CAL_CDMX": "REEMPLAZAR",
+        "ORA_CAL_CDMX_AVAIL": "REEMPLAZAR",
+        "ORA_CAL_QUERETARO": "REEMPLAZAR",
+        "ORA_CAL_VIRTUAL": "REEMPLAZAR",
+        "ORA_FROM_NUMBER": "REEMPLAZAR",
+        "ORA_SIMPLETALK_CLIENT_ID": "REEMPLAZAR",
+        "ORA_GHL_CALL_HOOK_URL": "REEMPLAZAR (hook GHL que lanza la llamada)"
+      }
+    }
+  ]
+}

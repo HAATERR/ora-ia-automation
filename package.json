@@ -1,0 +1,17 @@
+{
+  "name": "ora-ia-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Motor de provisioning de clientes Ora IA (GoHighLevel + n8n)",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "provision": "node provision/provision-client.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "@resvg/resvg-js": "^2.6.2"
+  }
+}

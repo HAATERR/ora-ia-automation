@@ -1,0 +1,56 @@
+{
+  "$comment": "FLOW-SPEC: el flujograma del cliente en formato machine-readable. El developer lo llena mirando el flujograma acordado. El GENERADOR lo compila a los workflows de n8n (con tokens {{ORA_*}}). Los IDs/PIT reales van en config/clients/<cliente>.client.json.",
+
+  "project": "primedental",
+  "description": "Cableado Prime Dental Studio (voz + WhatsApp)",
+
+  "$comment_stages": "Roles de stage del flujograma. El id real de cada uno va en el client config como ORA_STAGE_<ROLE>.",
+  "stages": ["lead_nuevo", "llamada_curso", "dnc", "dna", "whatsapp", "seguimiento", "no_calificado", "exito"],
+
+  "flows": {
+
+    "analisis_postllamada": {
+      "trigger": { "type": "webhook" },
+      "findContactBy": "to_number",
+      "updateCallSummary": ["transcript", "recording", "duration"],
+      "routeBy": "simpletalk_tag",
+      "routes": {
+        "dnc":      { "stage": "dnc" },
+        "dna":      { "stage": "dna", "then": "seguimientos" },
+        "answered": {
+          "gptClassify": {
+            "promptRef": "clasificacion",
+            "labels": {
+              "whatsapp":           { "stage": "whatsapp" },
+              "llamada ia":         { "stage": "seguimiento", "then": "seguimientos" },
+              "seguimiento manual": { "stage": "seguimiento", "gptReasonRef": "motivo", "notify": true }
+            }
+          }
+        }
+      }
+    },
+
+    "seguimientos": {
+      "trigger": { "type": "webhook" },
+      "sequence": [
+        { "wait": "2h" },
+        { "stopIfAnswered": true },
+        { "call": true, "$comment": "= poner tag 'llamar'; GHL lanza la llamada" },
+        { "stage": "seguimiento" },
+        { "wait": "24h" },
+        { "stopIfAnswered": true },
+        { "call": true }
+      ]
+    },
+
+    "cita_agendada": {
+      "trigger": { "type": "tag", "tag": "cita agendada" },
+      "stage": "exito",
+      "reminders": [
+        { "before": "1d", "via": "ghl", "messageRef": "recordatorio_1d" },
+        { "before": "4h", "via": "ghl", "messageRef": "recordatorio_4h" }
+      ]
+    }
+
+  }
+}

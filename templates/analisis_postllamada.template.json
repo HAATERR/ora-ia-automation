@@ -1,0 +1,799 @@
+{
+  "name": "Analisis Post-Llamada (template)",
+  "nodes": [
+    {
+      "name": "Webhook · Simpletalk",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "{{ORA_WEBHOOK_PATH}}",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "{{ORA_WEBHOOK_ID}}",
+      "id": "n1",
+      "position": [
+        220,
+        400
+      ]
+    },
+    {
+      "name": "Normalizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body ?? $input.first().json;\nconst tags = Array.isArray(b.tags) ? b.tags.map(t => String(t).toLowerCase()) : (b.tags ? [String(b.tags).toLowerCase()] : []);\nlet tag = 'answered';\nif (tags.includes('dnc')) tag = 'dnc'; else if (tags.includes('dna')) tag = 'dna'; else if (tags.includes('answered')) tag = 'answered';\nreturn [{ json: { toNumber: b.to_number ?? null, fromNumber: b.from_number ?? null, transcript: b.transcript ?? '', recordingLink: b.recording_link ?? '', callDuration: b.call_duration ?? '', appointment: b.appointment ?? '', tag, tagsRaw: tags } }];"
+      },
+      "id": "n2",
+      "position": [
+        420,
+        400
+      ]
+    },
+    {
+      "name": "GHL · Find Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/contacts/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ locationId: \"{{ORA_LOCATION_ID}}\", pageLimit: 1, filters: [ { field: \"phone\", operator: \"eq\", value: $('Normalizar').item.json.toNumber } ] }) }}",
+        "options": {}
+      },
+      "id": "n3",
+      "position": [
+        620,
+        400
+      ]
+    },
+    {
+      "name": "Contacto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const c = ($input.first().json.contacts && $input.first().json.contacts[0]) || null;\nconst n = $('Normalizar').item.json;\nreturn [{ json: { ...n, contactId: c ? c.id : '', found: !!c, contactName: c ? ((c.firstName || '') + ' ' + (c.lastName || '')).trim() : '' } }];"
+      },
+      "id": "n4",
+      "position": [
+        820,
+        400
+      ]
+    },
+    {
+      "name": "¿contacto encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "contactoenco-c",
+              "leftValue": "={{ $('Contacto').item.json.contactId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n5",
+      "position": [
+        1020,
+        400
+      ]
+    },
+    {
+      "name": "GHL · Update Call Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://services.leadconnectorhq.com/contacts/{{ $('Contacto').item.json.contactId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ customFields: [ { id: \"{{ORA_CF_TRANSCRIPT}}\", field_value: $('Contacto').item.json.transcript }, { id: \"{{ORA_CF_RECORDING}}\", field_value: $('Contacto').item.json.recordingLink }, { id: \"{{ORA_CF_DURATION}}\", field_value: String($('Contacto').item.json.callDuration || '') } ] }) }}",
+        "options": {}
+      },
+      "id": "n6",
+      "position": [
+        1240,
+        360
+      ]
+    },
+    {
+      "name": "GHL · Stage dnc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineId: \"{{ORA_PIPELINE_ID}}\", locationId: \"{{ORA_LOCATION_ID}}\", contactId: $('Contacto').item.json.contactId, pipelineStageId: \"{{ORA_STAGE_DNC}}\", status: \"open\", name: ($('Contacto').item.json.contactName || $('Contacto').item.json.phone || \"Lead\") }) }}",
+        "options": {}
+      },
+      "id": "n7",
+      "position": [
+        1680,
+        540
+      ]
+    },
+    {
+      "name": "¿tag = dnc?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "tagdnc-c",
+              "leftValue": "={{ $('Contacto').item.json.tag }}",
+              "rightValue": "dnc",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n8",
+      "position": [
+        1460,
+        360
+      ]
+    },
+    {
+      "name": "GHL · Stage dna",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineId: \"{{ORA_PIPELINE_ID}}\", locationId: \"{{ORA_LOCATION_ID}}\", contactId: $('Contacto').item.json.contactId, pipelineStageId: \"{{ORA_STAGE_DNA}}\", status: \"open\", name: ($('Contacto').item.json.contactName || $('Contacto').item.json.phone || \"Lead\") }) }}",
+        "options": {}
+      },
+      "id": "n9",
+      "position": [
+        1900,
+        720
+      ]
+    },
+    {
+      "name": "Enrolar → seguimientos (dna)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "{{ORA_WEBHOOK_SEGUIMIENTOS}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contactId: $('Contacto').item.json.contactId }) }}",
+        "options": {}
+      },
+      "id": "n10",
+      "position": [
+        2120,
+        720
+      ]
+    },
+    {
+      "name": "¿tag = dna?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "tagdna-c",
+              "leftValue": "={{ $('Contacto').item.json.tag }}",
+              "rightValue": "dna",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n11",
+      "position": [
+        1680,
+        540
+      ]
+    },
+    {
+      "name": "Set Prompts",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "classifyPrompt",
+              "value": "{{ORA_GPT_CLASSIFY_PROMPT}}",
+              "type": "string"
+            },
+            {
+              "id": "p2",
+              "name": "reasonPrompt",
+              "value": "{{ORA_GPT_REASON_PROMPT}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "n12",
+      "position": [
+        2120,
+        900
+      ]
+    },
+    {
+      "name": "GPT · Clasificar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"{{ORA_OPENAI_MODEL}}\", temperature: 0, messages: [ { role: \"system\", content: $json.classifyPrompt }, { role: \"user\", content: ($('Contacto').item.json.transcript || \"sin transcripcion\") } ] }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "{{ORA_OPENAI_CRED_ID}}",
+          "name": "OpenAI account"
+        }
+      },
+      "id": "n13",
+      "position": [
+        2340,
+        900
+      ]
+    },
+    {
+      "name": "Parse Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const ch = $input.first().json.choices; const content = (ch && ch[0] && ch[0].message && ch[0].message.content) || '';\nlet label = String(content).toLowerCase().replace(/[\"'.]/g, '').trim();\nconst valid = [\"whatsapp\",\"llamada ia\",\"seguimiento manual\"];\nif (!valid.includes(label)) label = \"seguimiento manual\";\nreturn [{ json: { label, classifyRaw: content } }];"
+      },
+      "id": "n14",
+      "position": [
+        2560,
+        900
+      ]
+    },
+    {
+      "name": "GHL · Stage whatsapp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineId: \"{{ORA_PIPELINE_ID}}\", locationId: \"{{ORA_LOCATION_ID}}\", contactId: $('Contacto').item.json.contactId, pipelineStageId: \"{{ORA_STAGE_WHATSAPP}}\", status: \"open\", name: ($('Contacto').item.json.contactName || $('Contacto').item.json.phone || \"Lead\") }) }}",
+        "options": {}
+      },
+      "id": "n15",
+      "position": [
+        3000,
+        1040
+      ]
+    },
+    {
+      "name": "¿whatsapp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "whatsapp-c",
+              "leftValue": "={{ $('Parse Label').item.json.label }}",
+              "rightValue": "whatsapp",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n16",
+      "position": [
+        2780,
+        900
+      ]
+    },
+    {
+      "name": "GHL · Stage llamada ia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineId: \"{{ORA_PIPELINE_ID}}\", locationId: \"{{ORA_LOCATION_ID}}\", contactId: $('Contacto').item.json.contactId, pipelineStageId: \"{{ORA_STAGE_SEGUIMIENTO}}\", status: \"open\", name: ($('Contacto').item.json.contactName || $('Contacto').item.json.phone || \"Lead\") }) }}",
+        "options": {}
+      },
+      "id": "n17",
+      "position": [
+        3220,
+        1100
+      ]
+    },
+    {
+      "name": "Enrolar → seguimientos (llamada ia)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "{{ORA_WEBHOOK_SEGUIMIENTOS}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contactId: $('Contacto').item.json.contactId }) }}",
+        "options": {}
+      },
+      "id": "n18",
+      "position": [
+        3900,
+        1100
+      ]
+    },
+    {
+      "name": "¿llamada ia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "llamadaia-c",
+              "leftValue": "={{ $('Parse Label').item.json.label }}",
+              "rightValue": "llamada ia",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n19",
+      "position": [
+        3000,
+        960
+      ]
+    },
+    {
+      "name": "GPT · Motivo (seguimiento manual)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"{{ORA_OPENAI_MODEL}}\", temperature: 0, messages: [ { role: \"system\", content: $('Set Prompts').item.json.reasonPrompt }, { role: \"user\", content: ($('Contacto').item.json.transcript || \"sin transcripcion\") } ] }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "{{ORA_OPENAI_CRED_ID}}",
+          "name": "OpenAI account"
+        }
+      },
+      "id": "n20",
+      "position": [
+        3440,
+        1160
+      ]
+    },
+    {
+      "name": "GHL · Stage seguimiento manual",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ORA_PIT}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineId: \"{{ORA_PIPELINE_ID}}\", locationId: \"{{ORA_LOCATION_ID}}\", contactId: $('Contacto').item.json.contactId, pipelineStageId: \"{{ORA_STAGE_SEGUIMIENTO}}\", status: \"open\", name: ($('Contacto').item.json.contactName || $('Contacto').item.json.phone || \"Lead\") }) }}",
+        "options": {}
+      },
+      "id": "n21",
+      "position": [
+        3660,
+        1160
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook · Simpletalk": {
+      "main": [
+        [
+          {
+            "node": "Normalizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar": {
+      "main": [
+        [
+          {
+            "node": "GHL · Find Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL · Find Contact": {
+      "main": [
+        [
+          {
+            "node": "Contacto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contacto": {
+      "main": [
+        [
+          {
+            "node": "¿contacto encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿contacto encontrado?": {
+      "main": [
+        [
+          {
+            "node": "GHL · Update Call Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL · Update Call Summary": {
+      "main": [
+        [
+          {
+            "node": "¿tag = dnc?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿tag = dnc?": {
+      "main": [
+        [
+          {
+            "node": "GHL · Stage dnc",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿tag = dna?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL · Stage dna": {
+      "main": [
+        [
+          {
+            "node": "Enrolar → seguimientos (dna)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿tag = dna?": {
+      "main": [
+        [
+          {
+            "node": "GHL · Stage dna",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Prompts": {
+      "main": [
+        [
+          {
+            "node": "GPT · Clasificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT · Clasificar": {
+      "main": [
+        [
+          {
+            "node": "Parse Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Label": {
+      "main": [
+        [
+          {
+            "node": "¿whatsapp?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿whatsapp?": {
+      "main": [
+        [
+          {
+            "node": "GHL · Stage whatsapp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿llamada ia?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL · Stage llamada ia": {
+      "main": [
+        [
+          {
+            "node": "Enrolar → seguimientos (llamada ia)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿llamada ia?": {
+      "main": [
+        [
+          {
+            "node": "GHL · Stage llamada ia",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GPT · Motivo (seguimiento manual)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT · Motivo (seguimiento manual)": {
+      "main": [
+        [
+          {
+            "node": "GHL · Stage seguimiento manual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,2 @@
+# Acá van los prompts generados por cliente (ej. acme.txt), referenciados desde la
+# config como "@prompts/acme.txt". Tu pipeline de prompts ya existente los deja acá.

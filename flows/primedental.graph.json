@@ -1,0 +1,33 @@
+{
+  "$comment": "Grafo EXTRAÍDO del flujograma de Miro (Claude leyó la imagen). Paso intermedio: Miro/imagen → este grafo → flow-spec → generate. El developer lo revisa.",
+  "source": "miro",
+  "boardUrl": "https://miro.com/app/board/uXjVHTo4SPU=/",
+
+  "nodes": [
+    { "id": "1", "label": "Lead Nuevo", "role": "lead_nuevo" },
+    { "id": "2", "label": "Llamada en Curso", "role": "llamada_curso" },
+    { "id": "c", "label": "Contestó", "role": "decision_answered" },
+    { "id": "3", "label": "DNC (Número Inválido)", "role": "dnc", "terminal": true },
+    { "id": "4", "label": "DNA 1 (No contestó)", "role": "dna" },
+    { "id": "5", "label": "Derivado a WhatsApp", "role": "whatsapp" },
+    { "id": "6", "label": "Seguimiento Multicanal", "role": "seguimiento" },
+    { "id": "7", "label": "No Calificado", "role": "no_calificado", "terminal": true },
+    { "id": "8", "label": "Éxito (Agendado/Transferido)", "role": "exito", "terminal": true },
+    { "id": "r2", "label": "Llamada a las 2 horas", "role": "reintento_2h" },
+    { "id": "r24", "label": "Llamada a las 24 horas", "role": "reintento_24h" }
+  ],
+
+  "edges": [
+    { "from": "1", "to": "2" },
+    { "from": "2", "to": "c" },
+    { "from": "2", "to": "4" },
+    { "from": "2", "to": "3" },
+    { "from": "c", "to": "8" },
+    { "from": "c", "to": "7" },
+    { "from": "c", "to": "5", "label": "Pide texto" },
+    { "from": "4", "to": "5", "label": "Si responde WA" },
+    { "from": "4", "to": "6", "label": "Si no responde WA" },
+    { "from": "6", "to": "r2" },
+    { "from": "r2", "to": "r24" }
+  ]
+}
