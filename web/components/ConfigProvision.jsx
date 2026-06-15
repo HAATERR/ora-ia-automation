@@ -75,7 +75,43 @@ export default function ConfigProvision({ spec, project }) {
   const [report, setReport] = useState(null);
   const [provError, setProvError] = useState(null);
 
+  // generación del prompt con IA (a medida de las etiquetas)
+  const [genContext, setGenContext] = useState("");
+  const [genBusy, setGenBusy] = useState(null); // flowName en curso
+  const [genError, setGenError] = useState(null);
+
   const setVal = (fn, tk, val) => setValues((s) => ({ ...s, [fn]: { ...s[fn], [tk]: val } }));
+
+  // etiquetas de clasificación de un flow (del gptClassify del spec)
+  const labelsForFlow = (fn) => {
+    const routes = spec.flows?.[fn]?.routes;
+    if (routes) for (const r of Object.values(routes)) if (r.gptClassify?.labels) return Object.keys(r.gptClassify.labels);
+    return [];
+  };
+
+  async function generatePrompt(fn) {
+    const labels = labelsForFlow(fn);
+    if (labels.length < 2) {
+      setGenError("Necesitás al menos 2 etiquetas en el nodo IA.");
+      return;
+    }
+    setGenError(null);
+    setGenBusy(fn);
+    try {
+      const r = await fetch("/api/gen-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ labels, project, context: genContext }),
+      });
+      const data = await readJsonSafe(r);
+      if (!r.ok) throw new Error(data?.error || "No pude generar el prompt.");
+      setVal(fn, "ORA_GPT_CLASSIFY_PROMPT", data.prompt);
+    } catch (e) {
+      setGenError(e.message);
+    } finally {
+      setGenBusy(null);
+    }
+  }
 
   const selectedPipeline = ghl?.pipelines?.find((p) => p.id === pipelineId);
   const stageOptions = selectedPipeline?.stages || [];
@@ -367,7 +403,30 @@ export default function ConfigProvision({ spec, project }) {
                               ))}
                             </select>
                           ) : meta.kind === "textarea" ? (
-                            <textarea {...common} rows={4} className={inputCls} placeholder={meta.help} />
+                            <>
+                              {tk === "ORA_GPT_CLASSIFY_PROMPT" && (
+                                <div className="mb-2 space-y-1.5">
+                                  <input
+                                    value={genContext}
+                                    onChange={(e) => setGenContext(e.target.value)}
+                                    placeholder="Contexto del negocio (opcional): ej. clínica dental, valoración $499, sucursales CDMX/Querétaro"
+                                    className={inputCls + " text-xs"}
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => generatePrompt(fn)}
+                                      disabled={genBusy === fn}
+                                      className="rounded-lg border border-indigo-700 bg-indigo-950/40 px-3 py-1.5 text-xs font-medium text-indigo-200 hover:border-indigo-500 disabled:opacity-50"
+                                    >
+                                      {genBusy === fn ? "Generando… (~30s)" : "✨ Generar con IA (según las etiquetas)"}
+                                    </button>
+                                    {genError && <span className="text-[11px] text-rose-400">{genError}</span>}
+                                  </div>
+                                </div>
+                              )}
+                              <textarea {...common} rows={tk === "ORA_GPT_CLASSIFY_PROMPT" ? 10 : 4} className={inputCls + (tk.startsWith("ORA_GPT_") ? " font-mono text-xs leading-relaxed" : "")} placeholder={meta.help} />
+                            </>
                           ) : (
                             <input {...common} className={inputCls} placeholder={meta.help} />
                           )}

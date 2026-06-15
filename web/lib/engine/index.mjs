@@ -5,6 +5,7 @@
 //   ghlInfo: pipelines/customFields/customValues de una subcuenta (para los dropdowns).
 
 export { extractFlow } from './extract.mjs';
+export { generateClassifyPrompt } from './gen-prompt.mjs';
 export { compileFlowSpec, COMPILABLE_FLOWS } from './generate.mjs';
 export { provisionToN8n, ghlInfo } from './provision.mjs';
 export { injectTokens, sanitizeWorkflow } from './template.mjs';
