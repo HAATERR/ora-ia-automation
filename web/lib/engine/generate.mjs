@@ -138,7 +138,16 @@ function compileAnalisis(flow) {
   let prev = 'GHL · Update Call Summary', prevOut = 0, x = 1460, y = 360;
   routes.forEach(([tag, action], i) => {
     const isLast = i === routes.length - 1;
-    const entry = buildRouteAction(wb, tag, action, x + 220, y + 180);
+    let entry = buildRouteAction(wb, tag, action, x + 220, y + 180);
+    // Si la llamada fue CONTESTADA (o DNC = no contactar), sacar al lead del seguimiento:
+    // ponemos el tag 'fin-seguimiento'; el flow de seguimientos lo chequea antes de cada
+    // llamada y se frena. Así la decisión "contestó / no" vive acá, no en seguimientos.
+    if (tag === 'answered' || tag === 'dnc') {
+      const stopNode = `GHL · Fin seguimiento (${tag})`;
+      wb.add(httpGhl(stopNode, 'POST', `=${GHL}/contacts/{{ $('Contacto').item.json.contactId }}/tags`, tagsBody('fin-seguimiento')), x + 220, y + 100);
+      wb.link(stopNode, entry);
+      entry = stopNode;
+    }
     if (isLast) { wb.link(prev, entry, prevOut); }
     else { const ifn = `¿tag = ${tag}?`; wb.add(ifNode(ifn, "={{ $('Contacto').item.json.tag }}", tag), x, y); wb.link(prev, ifn, prevOut); wb.link(ifn, entry, 0); prev = ifn; prevOut = 1; x += 220; y += 180; }
   });
@@ -146,24 +155,37 @@ function compileAnalisis(flow) {
 }
 
 function compileSeguimientos(flow) {
+  // Seguimientos SOLO lanza llamadas en una secuencia (esperar → llamar → esperar → llamar).
+  // Antes de CADA llamada hace un "guard": trae el contacto y, si ya tiene el tag
+  // 'fin-seguimiento' (que pone Análisis cuando la llamada fue contestada/DNC), TERMINA y no
+  // llama mas. La decisión "contestó o no" vive en Análisis, no acá.
   const wb = new WB();
+  const STOP_TAG = 'fin-seguimiento';
+  const cidExpr = "$('Webhook · Enrolado').item.json.body.contactId";
   let prev = wb.add(webhookNode('Webhook · Enrolado'), 220, 400), x = 420, n = 0;
-  let lastEval = null;
   for (const step of flow.sequence) {
     n++;
-    if (step.wait) { const m = String(step.wait).match(/^(\d+)([hmd])$/); const unit = { h: 'hours', m: 'minutes', d: 'days' }[m[2]]; const name = `Wait ${step.wait}`; wb.add(waitNode(name, +m[1], unit), x, 400); wb.link(prev, name); prev = name; }
-    else if (step.stopIfAnswered) {
-      const gc = `Get Contact ${n}`; wb.add(httpGhl(gc, 'GET', "=" + GHL + "/contacts/{{ $('Webhook · Enrolado').item.json.body.contactId }}", null), x, 400); linkPrev(wb, prev, gc);
-      const ev = `Eval ${n}`; wb.add(codeNode(ev, ["const c = $json.contact ?? $json;", "const tags = (c.tags || []).map(t => String(t).toLowerCase());", "return [{ json: { contactId: c.id, phone: c.phone, answered: tags.includes('answered') } }];"].join('\n')), x + 200, 400); wb.link(gc, ev);
-      const iff = `¿contestó ${n}?`; wb.add(ifNode(iff, `={{ $('${ev}').item.json.answered }}`, '', 'true', 'boolean', true), x + 400, 400); wb.link(ev, iff);
-      // true (contestó): si hay onAnswered, mover de stage; si no, termina.
-      if (step.onAnswered && step.onAnswered.stage) { const up = `GHL · Stage ${step.onAnswered.stage} (contestó ${n})`; wb.add(httpGhl(up, 'POST', GHL + '/opportunities/upsert', upsertBody(stageTok(step.onAnswered.stage), `'${ev}'`)), x + 400, 240); wb.link(iff, up, 0); }
-      lastEval = ev; x += 600;
-      // false (no contestó) sigue por la salida 1.
-      prev = { node: iff, out: 1 };
+    if (step.wait) {
+      const m = String(step.wait).match(/^(\d+)([hmd])$/); const unit = { h: 'hours', m: 'minutes', d: 'days' }[m[2]];
+      const name = `Wait ${step.wait}`; wb.add(waitNode(name, +m[1], unit), x, 400); linkPrev(wb, prev, name); prev = name; x += 220;
+    } else if (step.call) {
+      const gc = `Get Contact ${n}`;
+      wb.add(httpGhl(gc, 'GET', `=${GHL}/contacts/{{ ${cidExpr} }}`, null), x, 400); linkPrev(wb, prev, gc);
+      const ev = `¿Frenar ${n}?`;
+      wb.add(codeNode(ev, [
+        "const c = $json.contact ?? $json;",
+        "const tags = (c.tags || []).map(t => String(t).toLowerCase());",
+        `return [{ json: { contactId: c.id, stop: tags.includes('${STOP_TAG}') } }];`,
+      ].join('\n')), x + 200, 400); wb.link(gc, ev);
+      const iff = `IF frenar ${n}`;
+      wb.add(ifNode(iff, `={{ $('${ev}').item.json.stop }}`, '', 'true', 'boolean', true), x + 400, 400); wb.link(ev, iff);
+      // salida 0 (true = frenar) → no se hace nada (termina). salida 1 (false) → lanza la llamada.
+      const call = `Tag "llamar" ${n}`;
+      wb.add(httpGhl(call, 'POST', `=${GHL}/contacts/{{ $('${ev}').item.json.contactId }}/tags`, tagsBody('{{ORA_TAG_LLAMAR}}')), x + 600, 520);
+      wb.link(iff, call, 1);
+      prev = call; x += 800;
     }
-    else if (step.call) { const name = `Tag "llamar" ${n}`; wb.add(httpGhl(name, 'POST', `=${GHL}/contacts/{{ $('${lastEval || 'Contacto'}').item.json.contactId }}/tags`, tagsBody('{{ORA_TAG_LLAMAR}}')), x, 520); linkPrev(wb, prev, name); prev = name; x += 220; }
-    else if (step.stage) { const name = `GHL · Stage ${step.stage} ${n}`; wb.add(httpGhl(name, 'POST', GHL + '/opportunities/upsert', upsertBody(stageTok(step.stage), `'${lastEval || 'Contacto'}'`)), x, 520); linkPrev(wb, prev, name); prev = name; x += 220; }
+    // (los pasos stopIfAnswered/stage del modelo viejo se ignoran: la lógica vive en Análisis)
   }
   return wb.wf('Seguimientos (template)');
 }

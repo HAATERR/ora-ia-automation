@@ -168,11 +168,8 @@ export function defaultModel() {
     seguimientos: {
       sequence: [
         { wait: "2h" },
-        { stopIfAnswered: true },
         { call: true },
-        { stage: "seguimiento" },
         { wait: "24h" },
-        { stopIfAnswered: true },
         { call: true },
       ],
     },

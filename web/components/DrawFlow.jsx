@@ -130,8 +130,8 @@ function NoteNode({ id, data }) {
 const nodeTypes = { trigger: TriggerNode, stage: StageNode, gpt: GptNode, flowref: FlowRefNode, note: NoteNode };
 
 // ── editor de la secuencia de seguimientos ──
-const stepType = (s) => (s.wait != null ? "wait" : s.stopIfAnswered ? "stop" : s.call ? "call" : s.stage != null ? "stage" : "wait");
-function SeqEditor({ seq, stages, onChange }) {
+const stepType = (s) => (s.wait != null ? "wait" : "call");
+function SeqEditor({ seq, onChange }) {
   const set = (i, step) => onChange(seq.map((s, j) => (j === i ? step : s)));
   const move = (i, d) => {
     const j = i + d;
@@ -142,7 +142,7 @@ function SeqEditor({ seq, stages, onChange }) {
   };
   const remove = (i) => onChange(seq.filter((_, j) => j !== i));
   const add = () => onChange([...seq, { wait: "2h" }]);
-  const changeType = (i, t) => set(i, t === "wait" ? { wait: "2h" } : t === "stop" ? { stopIfAnswered: true } : t === "call" ? { call: true } : { stage: stages[0] || "" });
+  const changeType = (i, t) => set(i, t === "wait" ? { wait: "2h" } : { call: true });
   return (
     <div className="space-y-2">
       {seq.map((s, i) => {
@@ -152,25 +152,12 @@ function SeqEditor({ seq, stages, onChange }) {
             <span className="text-[10px] text-slate-500">{i + 1}</span>
             <select className={miniSel} value={t} onChange={(e) => changeType(i, e.target.value)}>
               <option value="wait">esperar</option>
-              <option value="stop">¿contestó?</option>
-              <option value="call">tag llamar</option>
-              <option value="stage">mover stage</option>
+              <option value="call">lanzar llamada</option>
             </select>
             {t === "wait" && (
-              <input className={miniSel + " w-20"} value={s.wait} onChange={(e) => set(i, { wait: e.target.value })} placeholder="2h / 30m / 1d" />
+              <input className={miniSel + " w-24"} value={s.wait} onChange={(e) => set(i, { wait: e.target.value })} placeholder="2h / 30m / 1d" />
             )}
-            {t === "stop" && (
-              <select className={miniSel} value={s.onAnswered?.stage || ""} onChange={(e) => set(i, e.target.value ? { stopIfAnswered: true, onAnswered: { stage: e.target.value } } : { stopIfAnswered: true })}>
-                <option value="">contestó → fin</option>
-                {stages.map((st) => <option key={st} value={st}>contestó → {st}</option>)}
-              </select>
-            )}
-            {t === "stage" && (
-              <select className={miniSel} value={s.stage || ""} onChange={(e) => set(i, { stage: e.target.value })}>
-                <option value="">— stage —</option>
-                {stages.map((st) => <option key={st} value={st}>{st}</option>)}
-              </select>
-            )}
+            {t === "call" && <span className="text-[10px] text-slate-500">tag “llamar” (si el lead no salió del seguimiento)</span>}
             <span className="ml-auto flex items-center gap-1">
               <button className="px-1 text-slate-500 hover:text-slate-200" onClick={() => move(i, -1)} title="subir">↑</button>
               <button className="px-1 text-slate-500 hover:text-slate-200" onClick={() => move(i, 1)} title="bajar">↓</button>
@@ -285,7 +272,6 @@ export default function DrawFlow() {
       seguimientos.sequence.forEach((s, i) => {
         const t = stepType(s);
         if (t === "wait" && !/^\d+[hmd]$/.test(String(s.wait || "").trim())) p.push(`Seguimientos paso ${i + 1}: la espera debe ser como 2h / 30m / 1d.`);
-        if (t === "stage" && !String(s.stage || "").trim()) p.push(`Seguimientos paso ${i + 1}: elegí un stage.`);
       });
     }
     return [...new Set(p)];
@@ -374,7 +360,7 @@ export default function DrawFlow() {
           {include.seguimientos && (
             <div className="space-y-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Secuencia de seguimientos</span>
-              <SeqEditor seq={seguimientos.sequence} stages={stages} onChange={(sequence) => setSeguimientos({ sequence })} />
+              <SeqEditor seq={seguimientos.sequence} onChange={(sequence) => setSeguimientos({ sequence })} />
             </div>
           )}
 

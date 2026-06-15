@@ -37,11 +37,8 @@ const EXAMPLE_FLOW_SPEC = JSON.stringify({
       trigger: { type: 'webhook' },
       sequence: [
         { wait: '2h' },
-        { stopIfAnswered: true },
         { call: true },
-        { stage: 'seguimiento' },
         { wait: '24h' },
-        { stopIfAnswered: true },
         { call: true },
       ],
     },
