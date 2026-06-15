@@ -10,6 +10,7 @@
 import { useMemo, useState } from "react";
 import { compileFlowSpec } from "@/lib/engine/generate.mjs";
 import { requiredTokens, enrollmentTargets, fieldMeta, FLOW_LABEL, FLOW_SHORT } from "@/lib/tokens";
+import { buildClassifyPrompt, buildReasonPrompt } from "@/lib/prompts";
 import { readJsonSafe } from "@/lib/http";
 
 const inputCls =
@@ -49,13 +50,22 @@ export default function ConfigProvision({ spec, project }) {
     Object.fromEntries(flowNames.map((fn) => [fn, `${FLOW_LABEL[fn] || fn} - ${project}`])),
   );
   const [values, setValues] = useState(() => {
+    // etiquetas de clasificación del flow (del gptClassify del spec) → para auto-generar el prompt
+    const labelsOf = (fn) => {
+      const routes = spec.flows?.[fn]?.routes;
+      if (routes) for (const r of Object.values(routes)) if (r.gptClassify?.labels) return Object.keys(r.gptClassify.labels);
+      return [];
+    };
     const v = {};
     for (const fn of flowNames) {
       v[fn] = {};
       for (const tk of flowTokens[fn]) {
         if (tk === "ORA_PIPELINE_ID") continue; // pipeline es global
         const meta = fieldMeta(tk);
-        v[fn][tk] = meta.kind === "webhookPath" ? `${slug(project)}-${FLOW_SHORT[fn] || fn}` : meta.default || "";
+        if (tk === "ORA_GPT_CLASSIFY_PROMPT") v[fn][tk] = buildClassifyPrompt(labelsOf(fn));
+        else if (tk === "ORA_GPT_REASON_PROMPT") v[fn][tk] = buildReasonPrompt();
+        else if (meta.kind === "webhookPath") v[fn][tk] = `${slug(project)}-${FLOW_SHORT[fn] || fn}`;
+        else v[fn][tk] = meta.default || "";
       }
     }
     return v;

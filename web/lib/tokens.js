@@ -50,8 +50,8 @@ export function fieldMeta(token) {
   if (token === "ORA_WEBHOOK_PATH") return { kind: "webhookPath", label: "Webhook path (n8n)", help: "La ruta del webhook en n8n. Elegila vos (única por workflow)." };
   if (token === "ORA_OPENAI_CRED_ID") return { kind: "text", label: "OpenAI cred ID (n8n)", help: "ID de la credencial OpenAI en tu n8n. Elegí una con cupo." };
   if (token === "ORA_OPENAI_MODEL") return { kind: "text", label: "Modelo OpenAI", default: "gpt-4o-mini" };
-  if (token === "ORA_GPT_CLASSIFY_PROMPT") return { kind: "textarea", label: "Prompt de clasificación", help: "El system prompt que clasifica el resultado de la llamada." };
-  if (token === "ORA_GPT_REASON_PROMPT") return { kind: "textarea", label: "Prompt de motivo", help: "El system prompt para extraer el motivo del seguimiento manual." };
+  if (token === "ORA_GPT_CLASSIFY_PROMPT") return { kind: "textarea", label: "Prompt de clasificación", help: "Generado automáticamente desde las etiquetas del nodo IA. Editalo o pegá tu versión detallada." };
+  if (token === "ORA_GPT_REASON_PROMPT") return { kind: "textarea", label: "Prompt de motivo", help: "Generado automáticamente. Extrae el motivo del seguimiento manual." };
   if (token === "ORA_TAG_LLAMAR") return { kind: "text", label: "Tag para lanzar llamada", default: "llamar" };
   if (token === "ORA_TAG_RECORDATORIOS") return { kind: "text", label: "Tag de recordatorios", default: "recordatorios-cita" };
   return { kind: "text", label: token };
